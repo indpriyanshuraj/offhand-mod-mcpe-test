@@ -1,0 +1,74 @@
+{
+  "namespace": "hud",
+  "offhand_slot": {
+    "type": "image",
+    "texture": "textures/ui/offhand_slot",
+    "layer": 1,
+    "size": [22, 22],
+    "offset": [-107, -1.5],
+    "anchor_from": "bottom_middle",
+    "anchor_to": "bottom_middle",
+    "controls": [
+      {
+        "offhand_items_grid": {
+          "type": "grid",
+          "size": [18, 18],
+          "layer": 1,
+          "grid_dimensions": [1, 1],
+          "collection_name": "offhand_items",
+          "$hotbar_collection_name": "offhand_items",
+          "$item_collection_name": "offhand_items",
+          "$stack_count_required": true,
+          "$durability_bar_required": true,
+          "$storage_bar_required": true,
+          "controls": [
+            {
+              "offhand_item_cell": {
+                "type": "panel",
+                "grid_position": [0, 0],
+                "size": [18, 18],
+                "controls": [
+                  {
+                    "offhand_item_icon@hud.hotbar_hud_item_icon": {
+                      "layer": 3,
+                      "size": [16, 16],
+                      "$item_renderer_binding_condition": "always"
+                    }
+                  },
+                  {
+                    "offhand_stack_count@common.stack_count_label": {
+                      "layer": 4
+                    }
+                  },
+                  {
+                    "offhand_item_durability@hud.item_durability": {
+                      "layer": 5
+                    }
+                  },
+                  {
+                    "offhand_item_storage@hud.item_storage": {
+                      "layer": 5
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "root_panel": {
+    "modifications": [
+      {
+        "operation": "insert_front",
+        "array_name": "controls",
+        "value": [
+          {
+            "offhand_slot@hud.offhand_slot": {}
+          }
+        ]
+      }
+    ]
+  }
+}

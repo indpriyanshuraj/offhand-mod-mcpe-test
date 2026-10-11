@@ -1,0 +1,9 @@
+.xmake/
+build/
+*.levipack
+*.so
+*.o
+compile_commands.json
+__pycache__/
+*.pyc
+.DS_Store

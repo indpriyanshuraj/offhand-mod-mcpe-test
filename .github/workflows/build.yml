@@ -1,0 +1,69 @@
+name: Android Build
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  XMAKE_COLORTERM: truecolor
+  XMAKE_THEME: default
+  FORCE_COLOR: "1"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up xmake (build/package cache enabled)
+        uses: xmake-io/github-action-setup-xmake@v1
+        with:
+          xmake-version: latest
+          build-cache: true
+          build-cache-key: offhand-qol-android-arm64
+          package-cache: true
+          package-cache-key: offhand-qol-preloader-ndk-r28c
+          project-path: .
+
+      - name: Set up Android NDK
+        id: ndk
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r28c
+          local-cache: true
+
+      - name: Run swap-policy unit tests
+        run: |
+          g++ -std=c++20 -Wall -Wextra -Werror -Isrc \
+            tests/swap_policy_test.cpp src/offhand/SwapPolicy.cpp \
+            -o /tmp/offhand_swap_policy_test
+          /tmp/offhand_swap_policy_test
+
+      - name: Configure xmake
+        run: >-
+          xmake f -y -p android -a arm64-v8a -m release
+          --ndk=${{ steps.ndk.outputs.ndk-path }}
+          --ccache=y --policies=build.ccache:y
+
+      - name: Build and package
+        run: xmake -y -v
+
+      - name: Verify native library
+        run: python3 scripts/verify_native_library.py build/android/arm64-v8a/release/libOffhandQoL.so
+
+      - name: Verify package contents
+        run: python3 scripts/verify_levipack.py build/android/arm64-v8a/release/OffhandQoL.levipack
+
+      - name: Upload .levipack
+        uses: actions/upload-artifact@v7
+        with:
+          name: OffhandQoL-android-arm64
+          path: build/android/arm64-v8a/release/OffhandQoL.levipack
+          if-no-files-found: error
+          retention-days: 14

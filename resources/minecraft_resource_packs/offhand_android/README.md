@@ -1,0 +1,3 @@
+This minimal first-pass RP reuses the supplied offhand slot texture and HUD collection markup. The slot background has no item-present visibility binding, so it remains visible when the offhand is empty. The native mod registers a single always-visible Swap button; there is no use/interact/place button.
+
+The collection `offhand_items` must be supplied by the native `OffhandContainerModel` integration for the item icon, count and durability to work. That native container hook remains to be implemented and validated against Android Minecraft 1.26.52.3. Until then, the slot background is the part that can be verified independently.
