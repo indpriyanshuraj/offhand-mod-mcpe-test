@@ -69,7 +69,14 @@ bool OffhandMod::enable(pl::mod::ModContext& context) {
     }
 
     mLogger->info("Registered single always-visible Swap button; no interact/use button is registered");
-    mRuntime.start(*mLogger);
+    mRuntime.start(*mLogger, [this](std::uintptr_t moduleBase) {
+        std::lock_guard lock(mRequestTraceMutex);
+        if (moduleBase != 0 && mLogger &&
+            mLifecycleEnabled.load(std::memory_order_acquire) &&
+            mModuleEnabled.load(std::memory_order_acquire)) {
+            (void)mRequestTrace.start(moduleBase, *mLogger);
+        }
+    });
     return true;
 }
 
@@ -77,6 +84,10 @@ bool OffhandMod::disable(pl::mod::ModContext&) {
     mLifecycleEnabled.store(false, std::memory_order_release);
     mModuleEnabled.store(false, std::memory_order_release);
     mRuntime.stop();
+    {
+        std::lock_guard lock(mRequestTraceMutex);
+        mRequestTrace.stop();
+    }
     pl::modmenu::unregisterButton(kSwapButtonId);
     pl::modmenu::unregisterModule(kModuleId);
     if (mLogger) mLogger->info("Offhand QoL disabled; no hooks or inventory mutations remain active");
@@ -84,7 +95,13 @@ bool OffhandMod::disable(pl::mod::ModContext&) {
 }
 
 bool OffhandMod::unload(pl::mod::ModContext&) {
+    mLifecycleEnabled.store(false, std::memory_order_release);
+    mModuleEnabled.store(false, std::memory_order_release);
     mRuntime.stop();
+    {
+        std::lock_guard lock(mRequestTraceMutex);
+        mRequestTrace.stop();
+    }
     pl::modmenu::unregisterButton(kSwapButtonId);
     pl::modmenu::unregisterModule(kModuleId);
     if (mLogger) mLogger->info("Offhand QoL unloaded");
@@ -93,7 +110,14 @@ bool OffhandMod::unload(pl::mod::ModContext&) {
 }
 
 void OffhandMod::onModuleToggle(bool enabled) {
+    std::lock_guard lock(mRequestTraceMutex);
     mModuleEnabled.store(enabled, std::memory_order_release);
+    if (enabled && mLifecycleEnabled.load(std::memory_order_acquire) &&
+        mRuntime.targetSupported() && mLogger) {
+        (void)mRequestTrace.start(mRuntime.moduleBase(), *mLogger);
+    } else if (!enabled) {
+        mRequestTrace.stop();
+    }
     if (mLogger) mLogger->info("Offhand QoL module toggled: {}", enabled ? "enabled" : "disabled");
 }
 

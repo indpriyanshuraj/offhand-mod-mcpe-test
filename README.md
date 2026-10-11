@@ -7,6 +7,7 @@ A small native mod for **Minecraft Bedrock 1.26.52.3**. The intended scope is de
 - [x] Native Levi/PreLoader lifecycle registration.
 - [x] One always-visible `Swap` button; no use/place/interact button.
 - [x] Poll-and-settle game-library detection and exact BuildID gate.
+- [x] Exact-BuildID, read-only trace for native Swap-action slot headers and network-ID variants.
 - [x] RP HUD slot background always visible (no `item_id_aux` visibility binding).
 - [x] Build/package pipeline using xmake, Android NDK r28c and a `.levipack` verifier.
 - [x] Unit tests for the pure swap-operation decision policy.
@@ -43,7 +44,7 @@ xmake -y -v
 python3 scripts/verify_levipack.py build/android/arm64-v8a/release/OffhandQoL.levipack
 ```
 
-The `Android Build` GitHub Actions workflow performs the same configure/build/package path, runs the pure policy test, verifies the resulting ELF and `.levipack`, and uploads `OffhandQoL.levipack` as a workflow artifact. The local environment used for this source milestone does not have xmake or the Android NDK configured, so a native build was not executed in this session.
+The `Android Build` GitHub Actions workflow performs the same configure/build/package path, runs the pure policy test, verifies the resulting ELF and `.levipack`, and uploads `OffhandQoL.levipack` as a workflow artifact. Its xmake setup enables build caching but disables the separate package-cache feature, avoiding the failing `xmake l utils.ci.packageskey` calculation while preserving xmake build cache and compiler cache. The local environment used for this source milestone does not have xmake or the Android NDK configured, so a native build was not executed in this session.
 
 Local xmake uses the `build.ccache` policy and `cprint()`-based colored diagnostics. `scripts/build-android.sh` sets `XMAKE_COLORTERM=truecolor` and `XMAKE_THEME=default`; the same environment is set in CI. Xmake documents `XMAKE_COLORTERM` as its terminal-color capability switch and `cprint()` as its colored logging API ([color output](https://xmake.io/api/scripts/builtin-modules/cprint.html), [environment variable](https://xmake.io/guide/extras/environment-variables.html)).
 
@@ -52,14 +53,15 @@ Local xmake uses the `build.ccache` policy and `cprint()`-based colored diagnost
 Filter Android logcat with:
 
 ```bash
-adb logcat -s OffhandQoL:* OffhandInv:* OffhandHUD:* Preloader:* -v time
+adb logcat -v time OffhandQoL:V OffhandInv:V OffhandHUD:V Preloader:V '*:S'
 ```
 
-The initial scaffold uses the mod logger name `OffhandQoL`; the other tags are reserved for the inventory/HUD work still to be implemented.
+The read-only request trace uses the mod logger name `OffhandQoL`. On the verified target build, open the normal inventory and perform a vanilla operation that swaps two occupied slots; the trace logs source/destination slot headers and network-ID variant bytes. The trace forwards the native request unchanged and does not implement the offhand button action.
 
 ## Architecture
 
 - `RuntimeProbe` waits for `libminecraftpe.so`, allows initialization to settle, then checks the exact BuildID.
+- `RequestTrace` hooks the target request-action ownership-transfer helper only after that gate, logs the payload of native Swap actions, and unhooks on module/mod disable.
 - `SwapPolicy` is a game-independent decision function that will select one of move-main-to-offhand, move-offhand-to-main, swap-hands, or no-op.
 - `Mod` owns the module and Android button lifecycle.
 - The RP adds the offhand slot background and keeps native collection bindings; it no longer carries unrelated custom-use animation/attachable assets.

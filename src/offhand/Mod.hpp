@@ -1,10 +1,12 @@
 #pragma once
 
 #include "offhand/RuntimeProbe.hpp"
+#include "offhand/RequestTrace.hpp"
 
 #include <pl/Mod.hpp>
 
 #include <atomic>
+#include <mutex>
 #include <string>
 
 namespace pl::log { class Logger; }
@@ -27,6 +29,9 @@ private:
     std::string mModId;
     std::atomic<bool> mLifecycleEnabled{false};
     std::atomic<bool> mModuleEnabled{true};
+    std::mutex mRequestTraceMutex;
+    RequestTrace mRequestTrace;
+    // Declared after RequestTrace so its watcher joins before the trace is destroyed.
     RuntimeProbe mRuntime;
 };
 

@@ -9,6 +9,7 @@
 #include <chrono>
 #include <cstring>
 #include <thread>
+#include <utility>
 
 namespace offhand_qol {
 namespace {
@@ -17,6 +18,7 @@ constexpr const char* kGameLibrary = "libminecraftpe.so";
 
 struct ProbeResult {
     bool mapped{};
+    std::uintptr_t moduleBase{};
     std::string buildId;
 };
 
@@ -28,6 +30,7 @@ int findGameLibrary(dl_phdr_info* info, size_t, void* opaque) {
 
     auto& result = *static_cast<ProbeResult*>(opaque);
     result.mapped = true;
+    result.moduleBase = static_cast<std::uintptr_t>(info->dlpi_addr);
 
     for (int i = 0; i < info->dlpi_phnum; ++i) {
         const ElfW(Phdr)& phdr = info->dlpi_phdr[i];
@@ -82,7 +85,7 @@ RuntimeProbe::~RuntimeProbe() {
     stop();
 }
 
-void RuntimeProbe::start(pl::log::Logger& logger) {
+void RuntimeProbe::start(pl::log::Logger& logger, std::function<void(std::uintptr_t)> onSupported) {
     if (mWatcher.joinable()) {
         return;
     }
@@ -90,8 +93,9 @@ void RuntimeProbe::start(pl::log::Logger& logger) {
     mLogger = &logger;
     mMapped.store(false, std::memory_order_release);
     mSupported.store(false, std::memory_order_release);
+    mModuleBase.store(0, std::memory_order_release);
     mStop.store(false, std::memory_order_release);
-    mWatcher = std::thread([this] {
+    mWatcher = std::thread([this, onSupported = std::move(onSupported)] {
         using namespace std::chrono_literals;
         constexpr int kPollAttempts = 1200; // bounded at roughly two minutes
 
@@ -124,14 +128,18 @@ void RuntimeProbe::start(pl::log::Logger& logger) {
         probe = inspectGameLibrary();
         mBuildId = probe.buildId;
         const bool supported = probe.mapped && mBuildId == ExpectedBuildId;
+        mModuleBase.store(supported ? probe.moduleBase : 0, std::memory_order_release);
         mSupported.store(supported, std::memory_order_release);
         if (mLogger) {
             mLogger->info("Minecraft build ID: {}", mBuildId.empty() ? "unavailable" : mBuildId);
             if (supported) {
                 mLogger->info("Target build verified. Inventory mutation/request backend is still fail-closed until its request ABI is verified.");
             } else {
-                mLogger->warn("Unsupported Minecraft build; OffhandQoL will not issue inventory requests");
+                mLogger->warn("Unsupported Minecraft build; OffhandQoL will not install target hooks or issue inventory requests");
             }
+        }
+        if (supported && !mStop.load(std::memory_order_acquire) && onSupported) {
+            onSupported(probe.moduleBase);
         }
     });
 }
@@ -153,6 +161,10 @@ bool RuntimeProbe::targetSupported() const noexcept {
 
 std::string RuntimeProbe::buildId() const {
     return mBuildId;
+}
+
+std::uintptr_t RuntimeProbe::moduleBase() const noexcept {
+    return mModuleBase.load(std::memory_order_acquire);
 }
 
 } // namespace offhand_qol

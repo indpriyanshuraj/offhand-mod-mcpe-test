@@ -21,14 +21,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Set up xmake (build/package cache enabled)
+      - name: Set up xmake (build cache enabled)
         uses: xmake-io/github-action-setup-xmake@v1
         with:
           xmake-version: latest
           build-cache: true
           build-cache-key: offhand-qol-android-arm64
-          package-cache: true
-          package-cache-key: offhand-qol-preloader-ndk-r28c
+          # Avoid xmake-action package-key calculation (`xmake l utils.ci.packageskey`),
+          # which has been crashing with exit code 255 on xmake 3.x. Build cache remains enabled.
+          package-cache: false
           project-path: .
 
       - name: Set up Android NDK
