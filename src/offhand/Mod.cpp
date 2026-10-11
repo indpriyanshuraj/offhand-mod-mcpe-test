@@ -1,8 +1,8 @@
 #include "offhand/Mod.hpp"
 
+#include "offhand/Log.hpp"
 #include "offhand/SwapPolicy.hpp"
 
-#include <pl/Logger.hpp>
 #include <pl/ModMenu.hpp>
 
 #include <string>
@@ -17,17 +17,16 @@ constexpr std::string_view kSwapButtonId = "offhandqol.swap";
 } // namespace
 
 bool OffhandMod::load(pl::mod::ModContext& context) {
-    mLogger = &pl::log::Logger::getOrCreate("OffhandQoL");
     mModId = context.id();
-    mLogger->info("Offhand QoL loaded; client-only scope, no custom server packets");
-    mLogger->info("Target build gate: {}", RuntimeProbe::ExpectedBuildId);
-    mLogger->info("Startup path follows poll-and-settle; no dlopen hook is installed");
+    log::info("Mod load entered; id=%s", mModId.c_str());
+    log::info("Target BuildID gate: %s", RuntimeProbe::ExpectedBuildId);
+    log::info("Startup uses poll-and-settle; no dlopen hook is installed");
     return true;
 }
 
 bool OffhandMod::enable(pl::mod::ModContext& context) {
-    mLogger = &pl::log::Logger::getOrCreate("OffhandQoL");
     mModId = context.id();
+    log::info("Mod enable entered; registering Mod Menu controls");
     mLifecycleEnabled.store(true, std::memory_order_release);
     mModuleEnabled.store(true, std::memory_order_release);
 
@@ -39,7 +38,7 @@ bool OffhandMod::enable(pl::mod::ModContext& context) {
         .onToggle([this](std::string_view, bool enabled) { onModuleToggle(enabled); });
 
     if (!module.registerModule()) {
-        mLogger->error("Failed to register Offhand QoL module in Levi Mod Menu");
+        log::error("Failed to register Offhand QoL module in Levi Mod Menu");
         mLifecycleEnabled.store(false, std::memory_order_release);
         mModuleEnabled.store(false, std::memory_order_release);
         return false;
@@ -61,20 +60,20 @@ bool OffhandMod::enable(pl::mod::ModContext& context) {
         });
 
     if (!button.registerButton()) {
-        mLogger->error("Failed to register Swap button; unregistering module");
+        log::error("Failed to register Swap button; unregistering module");
         pl::modmenu::unregisterModule(kModuleId);
         mLifecycleEnabled.store(false, std::memory_order_release);
         mModuleEnabled.store(false, std::memory_order_release);
         return false;
     }
 
-    mLogger->info("Registered single always-visible Swap button; no interact/use button is registered");
-    mRuntime.start(*mLogger, [this](std::uintptr_t moduleBase) {
+    log::info("Registered always-visible Swap button; no interact/use button is registered");
+    mRuntime.start([this](std::uintptr_t moduleBase) {
         std::lock_guard lock(mRequestTraceMutex);
-        if (moduleBase != 0 && mLogger &&
+        if (moduleBase != 0 &&
             mLifecycleEnabled.load(std::memory_order_acquire) &&
             mModuleEnabled.load(std::memory_order_acquire)) {
-            (void)mRequestTrace.start(moduleBase, *mLogger);
+            (void)mRequestTrace.start(moduleBase);
         }
     });
     return true;
@@ -90,7 +89,7 @@ bool OffhandMod::disable(pl::mod::ModContext&) {
     }
     pl::modmenu::unregisterButton(kSwapButtonId);
     pl::modmenu::unregisterModule(kModuleId);
-    if (mLogger) mLogger->info("Offhand QoL disabled; no hooks or inventory mutations remain active");
+    log::info("Mod disabled; request tracing removed and inventory remains untouched");
     return true;
 }
 
@@ -104,8 +103,7 @@ bool OffhandMod::unload(pl::mod::ModContext&) {
     }
     pl::modmenu::unregisterButton(kSwapButtonId);
     pl::modmenu::unregisterModule(kModuleId);
-    if (mLogger) mLogger->info("Offhand QoL unloaded");
-    mLogger = nullptr;
+    log::info("Mod unloaded");
     return true;
 }
 
@@ -113,12 +111,12 @@ void OffhandMod::onModuleToggle(bool enabled) {
     std::lock_guard lock(mRequestTraceMutex);
     mModuleEnabled.store(enabled, std::memory_order_release);
     if (enabled && mLifecycleEnabled.load(std::memory_order_acquire) &&
-        mRuntime.targetSupported() && mLogger) {
-        (void)mRequestTrace.start(mRuntime.moduleBase(), *mLogger);
+        mRuntime.targetSupported()) {
+        (void)mRequestTrace.start(mRuntime.moduleBase());
     } else if (!enabled) {
         mRequestTrace.stop();
     }
-    if (mLogger) mLogger->info("Offhand QoL module toggled: {}", enabled ? "enabled" : "disabled");
+    log::info("Mod Menu feature toggle changed: %s", enabled ? "enabled" : "disabled");
 }
 
 void OffhandMod::requestSwap() {
@@ -128,16 +126,14 @@ void OffhandMod::requestSwap() {
     }
 
     if (!mRuntime.targetSupported()) {
-        if (mLogger) mLogger->warn("Swap ignored: target build has not been verified as supported");
+        log::warn("Swap ignored: target build has not been verified as supported");
         return;
     }
 
     // Deliberate fail-closed milestone: no inventory or packet state is mutated
     // until the ItemStackNetManagerClient request ABI has been verified against
     // the Android 1.26.52.3 binary. The button and HUD RP can be tested safely.
-    if (mLogger) {
-        mLogger->warn("Swap press received, but vanilla ItemStackRequest backend is not armed yet; inventory left untouched");
-    }
+    log::warn("Swap press received, but native ItemStackRequest backend is not armed; inventory left untouched");
 }
 
 } // namespace offhand_qol

@@ -1,9 +1,8 @@
 #include "offhand/RequestTrace.hpp"
 
-#include <pl/Logger.hpp>
+#include "offhand/Log.hpp"
 #include <pl/memory/Hook.hpp>
 
-#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <iomanip>
@@ -26,7 +25,6 @@ static_assert(kDestinationSlotOffset + kSlotInfoSize == kSwapActionSize);
 
 using AddRequestActionFn = void (*)(void* manager, void* uniqueActionHolder);
 void* gOriginalRaw{};
-std::atomic<pl::log::Logger*> gLogger{nullptr};
 
 std::string hexBytes(const std::uint8_t* bytes, std::size_t count) {
     std::ostringstream output;
@@ -57,14 +55,14 @@ void traceAddRequestAction(void* manager, void* uniqueActionHolder) {
                 // padding, and a 24-byte discriminated network-ID variant.
                 const auto* source = bytes + kSourceSlotOffset;
                 const auto* destination = bytes + kDestinationSlotOffset;
-                if (auto* logger = gLogger.load(std::memory_order_acquire)) {
-                    logger->info(
-                        "Vanilla Swap action observed (read-only): src_header=[{}] src_netid_variant=[{}] dst_header=[{}] dst_netid_variant=[{}]",
-                        hexBytes(source, kSlotHeaderSize),
-                        hexBytes(source + 0x10, kSlotInfoSize - 0x10),
-                        hexBytes(destination, kSlotHeaderSize),
-                        hexBytes(destination + 0x10, kSlotInfoSize - 0x10));
-                }
+                const std::string sourceHeader = hexBytes(source, kSlotHeaderSize);
+                const std::string sourceNetId = hexBytes(source + 0x10, kSlotInfoSize - 0x10);
+                const std::string destinationHeader = hexBytes(destination, kSlotHeaderSize);
+                const std::string destinationNetId = hexBytes(destination + 0x10, kSlotInfoSize - 0x10);
+                log::info(
+                    "Vanilla Swap action observed (read-only): src_header=[%s] src_netid_variant=[%s] dst_header=[%s] dst_netid_variant=[%s]",
+                    sourceHeader.c_str(), sourceNetId.c_str(),
+                    destinationHeader.c_str(), destinationNetId.c_str());
             }
         }
     }
@@ -79,16 +77,15 @@ RequestTrace::~RequestTrace() {
     stop();
 }
 
-bool RequestTrace::start(std::uintptr_t moduleBase, pl::log::Logger& logger) {
+bool RequestTrace::start(std::uintptr_t moduleBase) {
     std::lock_guard lock(mMutex);
     if (mInstalled) return true;
     if (moduleBase == 0) {
-        logger.warn("Request trace not installed: Minecraft module base is unavailable");
+        log::warn("Request trace not installed: Minecraft module base is unavailable");
         return false;
     }
 
     const auto target = moduleBase + kAddRequestActionRva;
-    gLogger.store(&logger, std::memory_order_release);
     gOriginalRaw = nullptr;
     const int result = pl::memory::hook(
         reinterpret_cast<void*>(target),
@@ -101,14 +98,13 @@ bool RequestTrace::start(std::uintptr_t moduleBase, pl::log::Logger& logger) {
             pl::memory::unhook(reinterpret_cast<void*>(target), reinterpret_cast<void*>(&traceAddRequestAction));
         }
         gOriginalRaw = nullptr;
-        gLogger.store(nullptr, std::memory_order_release);
-        logger.warn("Read-only request trace hook failed at RVA 0x10041D9C (status {})", result);
+        log::warn("Read-only request trace hook failed at RVA 0x10041D9C (status %d)", result);
         return false;
     }
 
     mTarget = target;
     mInstalled = true;
-    logger.info("Read-only vanilla Swap-action trace installed for the verified Android build");
+    log::info("Read-only vanilla Swap-action trace installed for verified Android build");
     return true;
 }
 
@@ -119,7 +115,6 @@ void RequestTrace::stop() {
         mInstalled = false;
         mTarget = 0;
     }
-    gLogger.store(nullptr, std::memory_order_release);
 }
 
 } // namespace offhand_qol

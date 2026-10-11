@@ -46,17 +46,23 @@ python3 scripts/verify_levipack.py build/android/arm64-v8a/release/OffhandQoL.le
 
 The `Android Build` GitHub Actions workflow performs the same configure/build/package path, runs the pure policy test, verifies the resulting ELF and `.levipack`, and uploads `OffhandQoL.levipack` as a workflow artifact. Its xmake setup enables build caching but disables the separate package-cache feature, avoiding the failing `xmake l utils.ci.packageskey` calculation while preserving xmake build cache and compiler cache. The local environment used for this source milestone does not have xmake or the Android NDK configured, so a native build was not executed in this session.
 
-Local xmake uses the `build.ccache` policy and `cprint()`-based colored diagnostics. `scripts/build-android.sh` sets `XMAKE_COLORTERM=truecolor` and `XMAKE_THEME=default`; the same environment is set in CI. Xmake documents `XMAKE_COLORTERM` as its terminal-color capability switch and `cprint()` as its colored logging API ([color output](https://xmake.io/api/scripts/builtin-modules/cprint.html), [environment variable](https://xmake.io/guide/extras/environment-variables.html)).
+Local xmake uses the `build.ccache` policy. The local build script and CI set `XMAKE_COLORTERM=truecolor`, `XMAKE_THEME=default`, and `FORCE_COLOR=1`; xmake's own build output handles colour. Project messages use `print()` because `cprint()` is not a global interface in the affected xmake version.
 
 ## Runtime logs
 
-Filter Android logcat with:
+The mod calls Android's `__android_log_print` directly using the stable tag `OffhandQoL`; it does not depend on the PreLoader logger configuration. With a device connected and Android platform-tools installed, start the launcher and capture only this mod's log lines:
 
 ```bash
-adb logcat -v time OffhandQoL:V OffhandInv:V OffhandHUD:V Preloader:V '*:S'
+adb logcat -v threadtime -s OffhandQoL:V '*:S'
 ```
 
-The read-only request trace uses the mod logger name `OffhandQoL`. On the verified target build, open the normal inventory and perform a vanilla operation that swaps two occupied slots; the trace logs source/destination slot headers and network-ID variant bytes. The trace forwards the native request unchanged and does not implement the offhand button action.
+Equivalent helper: `./scripts/filter-logcat.sh`. To include crash context while debugging, use a second terminal with `adb logcat -v threadtime -s OffhandQoL:V Preloader:V AndroidRuntime:E DEBUG:E`.
+
+The read-only request trace uses the same `OffhandQoL` Android log tag. On the verified target build, open the normal inventory and perform a vanilla operation that generates a Swap action; the trace logs source/destination slot headers and network-ID variant bytes. It forwards the native request unchanged and does not implement the offhand button action.
+
+## Reference compatibility notes
+
+The supplied `offhand.levipack` is an Android AArch64 package targeting the same observed BuildID, but its strings and description indicate a custom Offhand host handshake and host-side support for swap/use. FrederoxDev's [`Offhand`](https://github.com/FrederoxDev/Offhand) source is a Windows/Amethyst mod pinned to Bedrock 1.26.42; its `SwapOffhandPacket` handler changes server inventory directly, which cannot be reused as a vanilla-server request. The implementation here borrows the feature decomposition (swap button, offhand HUD model/slot and scoped item operations) but keeps custom packet sending and client-only inventory mutation out of the code path.
 
 ## Architecture
 

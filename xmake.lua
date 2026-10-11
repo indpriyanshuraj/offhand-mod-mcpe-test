@@ -31,7 +31,9 @@ add_requires("preloader")
 local mod_name = "OffhandQoL"
 local mod_version = "0.1.0"
 
-cprint("${bright cyan}[OffhandQoL]${clear} configuring Android-native build")
+-- `print()` is stable across xmake releases; xmake's own coloured progress
+-- is controlled by XMAKE_COLORTERM/XMAKE_THEME in the local script and CI.
+print("[OffhandQoL] configuring Android-native build")
 
 target(mod_name)
     set_kind("shared")
@@ -90,6 +92,6 @@ target(mod_name)
             "--output", path.join(target:targetdir(), "OffhandQoL.levipack")
         }
 
-        cprint("${bright green}[OffhandQoL]${clear} packaging .levipack")
+        print("[OffhandQoL] packaging .levipack")
         os.vrunv(python.program, args)
     end)

@@ -3,8 +3,6 @@
 #include <cstdint>
 #include <mutex>
 
-namespace pl::log { class Logger; }
-
 namespace offhand_qol {
 
 // Installs a read-only, BuildID-gated trace of vanilla Swap actions submitted
@@ -17,7 +15,7 @@ public:
     RequestTrace& operator=(const RequestTrace&) = delete;
     ~RequestTrace();
 
-    [[nodiscard]] bool start(std::uintptr_t moduleBase, pl::log::Logger& logger);
+    [[nodiscard]] bool start(std::uintptr_t moduleBase);
     void stop();
 
 private:

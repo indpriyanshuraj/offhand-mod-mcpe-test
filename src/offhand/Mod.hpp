@@ -9,7 +9,6 @@
 #include <mutex>
 #include <string>
 
-namespace pl::log { class Logger; }
 namespace pl::mod { class ModContext; }
 
 namespace offhand_qol {
@@ -25,7 +24,6 @@ private:
     void onModuleToggle(bool enabled);
     void requestSwap();
 
-    pl::log::Logger* mLogger{};
     std::string mModId;
     std::atomic<bool> mLifecycleEnabled{false};
     std::atomic<bool> mModuleEnabled{true};

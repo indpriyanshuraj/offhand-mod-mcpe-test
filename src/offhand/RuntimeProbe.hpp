@@ -6,8 +6,6 @@
 #include <string>
 #include <thread>
 
-namespace pl::log { class Logger; }
-
 namespace offhand_qol {
 
 class RuntimeProbe {
@@ -17,7 +15,7 @@ public:
     RuntimeProbe& operator=(const RuntimeProbe&) = delete;
     ~RuntimeProbe();
 
-    void start(pl::log::Logger& logger, std::function<void(std::uintptr_t)> onSupported = {});
+    void start(std::function<void(std::uintptr_t)> onSupported = {});
     void stop();
 
     [[nodiscard]] bool targetMapped() const noexcept;
@@ -34,7 +32,6 @@ private:
     std::atomic<bool> mSupported{false};
     std::atomic<std::uintptr_t> mModuleBase{0};
     std::thread mWatcher;
-    pl::log::Logger* mLogger{};
     std::string mBuildId;
 };
 

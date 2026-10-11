@@ -1,6 +1,5 @@
 #include "offhand/RuntimeProbe.hpp"
-
-#include <pl/Logger.hpp>
+#include "offhand/Log.hpp"
 
 #include <link.h>
 #include <elf.h>
@@ -85,12 +84,11 @@ RuntimeProbe::~RuntimeProbe() {
     stop();
 }
 
-void RuntimeProbe::start(pl::log::Logger& logger, std::function<void(std::uintptr_t)> onSupported) {
+void RuntimeProbe::start(std::function<void(std::uintptr_t)> onSupported) {
     if (mWatcher.joinable()) {
         return;
     }
 
-    mLogger = &logger;
     mMapped.store(false, std::memory_order_release);
     mSupported.store(false, std::memory_order_release);
     mModuleBase.store(0, std::memory_order_release);
@@ -112,12 +110,12 @@ void RuntimeProbe::start(pl::log::Logger& logger, std::function<void(std::uintpt
             return;
         }
         if (!probe.mapped) {
-            if (mLogger) mLogger->warn("Runtime probe timed out waiting for libminecraftpe.so; gameplay hooks remain disabled");
+            log::warn("Runtime probe timed out waiting for libminecraftpe.so; gameplay hooks remain disabled");
             return;
         }
 
         mMapped.store(true, std::memory_order_release);
-        if (mLogger) mLogger->info("Minecraft library mapped; waiting 5 seconds for loader/game initialization to settle");
+        log::info("Minecraft library mapped; waiting 5 seconds for loader/game initialization to settle");
         for (int i = 0; i < 50 && !mStop.load(std::memory_order_acquire); ++i) {
             std::this_thread::sleep_for(100ms);
         }
@@ -130,13 +128,11 @@ void RuntimeProbe::start(pl::log::Logger& logger, std::function<void(std::uintpt
         const bool supported = probe.mapped && mBuildId == ExpectedBuildId;
         mModuleBase.store(supported ? probe.moduleBase : 0, std::memory_order_release);
         mSupported.store(supported, std::memory_order_release);
-        if (mLogger) {
-            mLogger->info("Minecraft build ID: {}", mBuildId.empty() ? "unavailable" : mBuildId);
-            if (supported) {
-                mLogger->info("Target build verified. Inventory mutation/request backend is still fail-closed until its request ABI is verified.");
-            } else {
-                mLogger->warn("Unsupported Minecraft build; OffhandQoL will not install target hooks or issue inventory requests");
-            }
+        log::info("Minecraft build ID: %s", mBuildId.empty() ? "unavailable" : mBuildId.c_str());
+        if (supported) {
+            log::info("Target build verified. Swap mutation remains disabled pending request-backend validation.");
+        } else {
+            log::warn("Unsupported Minecraft build; target hooks and inventory requests remain disabled");
         }
         if (supported && !mStop.load(std::memory_order_acquire) && onSupported) {
             onSupported(probe.moduleBase);
