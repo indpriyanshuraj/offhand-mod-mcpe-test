@@ -5,8 +5,7 @@ add_rules("mode.debug", "mode.release")
 set_languages("c++20")
 set_policy("package.requires_lock", true)
 
--- Keep both local builds and CI incremental. Xmake's console theme handles
--- coloured progress; scripts/build-android.sh forces a colour-capable theme.
+-- Keep local builds incremental and terminal diagnostics readable.
 set_policy("build.ccache", true)
 if os.getenv("XMAKE_COLORTERM") == nil then
     os.setenv("XMAKE_COLORTERM", "truecolor")
@@ -26,7 +25,9 @@ package("preloader")
     end)
 package_end()
 
-add_requires("preloader")
+-- PreLoader's public logger header includes <fmt/format.h>. Declare fmt as a
+-- direct package dependency so its headers are present when compiling this mod.
+add_requires("preloader", "fmt")
 
 local mod_name = "OffhandQoL"
 local mod_version = "0.1.0"
@@ -41,7 +42,7 @@ target(mod_name)
     set_strip("all")
     add_files("src/main.cpp", "src/offhand/*.cpp")
     add_includedirs("include", "src")
-    add_packages("preloader")
+    add_packages("preloader", "fmt")
 
     if is_plat("android") then
         add_defines("OFFHAND_QOL_ANDROID=1")
