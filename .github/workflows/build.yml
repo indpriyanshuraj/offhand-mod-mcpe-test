@@ -1,8 +1,7 @@
-name: Android Build
+name: Build OffhandQoL
 
 on:
   push:
-    branches: [main, master]
   pull_request:
   workflow_dispatch:
 
@@ -18,53 +17,63 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v7
+      - uses: actions/checkout@v7
 
-      - name: Set up xmake (build cache enabled)
+      - name: Setup xmake
         uses: xmake-io/github-action-setup-xmake@v1
         with:
           xmake-version: latest
-          build-cache: true
-          build-cache-key: offhand-qol-android-arm64
-          # Avoid xmake-action package-key calculation (`xmake l utils.ci.packageskey`),
-          # which has been crashing with exit code 255 on xmake 3.x. Build cache remains enabled.
-          package-cache: false
-          project-path: .
 
-      - name: Set up Android NDK
-        id: ndk
+      - name: Setup Android NDK
         uses: nttld/setup-ndk@v1
+        id: ndk
         with:
           ndk-version: r28c
-          local-cache: true
+
+      - name: Verify NDK toolchain
+        env:
+          NDK_PATH: ${{ steps.ndk.outputs.ndk-path }}
+        run: |
+          set -euxo pipefail
+          test -d "$NDK_PATH"
+          test -x "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++"
+          "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++" --version
 
       - name: Run swap-policy unit tests
         run: |
+          set -euxo pipefail
           g++ -std=c++20 -Wall -Wextra -Werror -Isrc \
             tests/swap_policy_test.cpp src/offhand/SwapPolicy.cpp \
             -o /tmp/offhand_swap_policy_test
           /tmp/offhand_swap_policy_test
 
-      - name: Configure xmake
-        run: >-
-          xmake f -y -p android -a arm64-v8a -m release
-          --ndk=${{ steps.ndk.outputs.ndk-path }}
-          --ccache=y --policies=build.ccache:y
+      - name: Configure, build and package
+        env:
+          NDK_PATH: ${{ steps.ndk.outputs.ndk-path }}
+        run: |
+          set -euxo pipefail
+          export ANDROID_NDK_ROOT="$NDK_PATH"
+          export ANDROID_NDK_HOME="$NDK_PATH"
+          xmake f -y -p android -a arm64-v8a -m release \
+            --ndk="$NDK_PATH" --ccache=y --policies=build.ccache:y
+          xmake -y -v
 
-      - name: Build and package
-        run: xmake -y -v
+      - name: Verify outputs
+        run: |
+          set -euxo pipefail
+          OUT="build/android/arm64-v8a/release"
+          test -s "$OUT/libOffhandQoL.so"
+          test -s "$OUT/OffhandQoL.levipack"
+          python3 scripts/verify_native_library.py "$OUT/libOffhandQoL.so"
+          python3 scripts/verify_levipack.py "$OUT/OffhandQoL.levipack"
+          sha256sum "$OUT/libOffhandQoL.so" "$OUT/OffhandQoL.levipack"
 
-      - name: Verify native library
-        run: python3 scripts/verify_native_library.py build/android/arm64-v8a/release/libOffhandQoL.so
-
-      - name: Verify package contents
-        run: python3 scripts/verify_levipack.py build/android/arm64-v8a/release/OffhandQoL.levipack
-
-      - name: Upload .levipack
+      - name: Upload CI artifacts
         uses: actions/upload-artifact@v7
         with:
-          name: OffhandQoL-android-arm64
-          path: build/android/arm64-v8a/release/OffhandQoL.levipack
+          name: OffhandQoL-android-arm64-${{ github.sha }}
+          path: |
+            build/android/arm64-v8a/release/OffhandQoL.levipack
+            build/android/arm64-v8a/release/libOffhandQoL.so
           if-no-files-found: error
           retention-days: 14

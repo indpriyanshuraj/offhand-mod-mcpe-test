@@ -31,8 +31,6 @@ add_requires("preloader")
 local mod_name = "OffhandQoL"
 local mod_version = "0.1.0"
 
--- `print()` is stable across xmake releases; xmake's own coloured progress
--- is controlled by XMAKE_COLORTERM/XMAKE_THEME in the local script and CI.
 print("[OffhandQoL] configuring Android-native build")
 
 target(mod_name)
